@@ -1,0 +1,105 @@
+/*
+    This library is free software; you can redistribute it and/or
+    modify it under the terms of the GNU Lesser General Public
+    License as published by the Free Software Foundation; either
+    version 2.1 of the License, or (at your option) any later version.
+
+    This library is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+    Lesser General Public License for more details.
+
+    You should have received a copy of the GNU Lesser General Public
+    License along with this library; if not, write to the Free Software
+    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+
+    Copyright (c) 2020 Marek Mosiewicz
+ */
+
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath group: 'org.ajoberstar.grgit', name: 'grgit-core', version: '3.0.0-beta.1'
+        classpath 'de.undercouch:gradle-download-task:4.0.0'
+    }
+}
+plugins {
+    id "de.undercouch.download" version "4.0.0"
+    id "org.ajoberstar.grgit" version "3.0.0-beta.1"
+}
+
+apply plugin: "org.ajoberstar.grgit"
+apply plugin: "de.undercouch.download"
+
+//importing scripts
+Binding binding = new Binding();
+binding.setProperty('rootBaseDir', rootProject.projectDir.toString())
+def rootDir = rootProject.projectDir.toString()
+
+ext.paths = new GroovyShell(binding).parse(new File(rootDir+'/scripts/utils/paths.gradle'))
+ext.us = new GroovyShell(binding).parse(new File(rootDir+'/scripts/utils/utils.gradle'))
+//we need to initalize it as it seems that there is no access to project
+// properties form script
+
+import org.ajoberstar.grgit.*
+import de.undercouch.download.*
+
+
+task(clone) {
+    //we clone in configuration phase as we need build scripts later
+    def repositories = [["odoo", "https://github.com/odoo/odoo.git"]]
+    repositories.collect {
+        it
+    }.eachWithIndex { operation, index ->
+        String workingDir = paths.getSourceDir(operation[0])
+        if (!us.isFileExists(workingDir + "/.git")) {
+            println "Cloning "+operation[1]
+            us.ensureDirExists(workingDir)
+            Object props = [dir: workingDir, uri: operation[1]]
+            Grgit.clone(props)
+        }
+    }
+
+}
+//TODO move repos to settings.gradle as list
+task(downloadAll) {
+    def arts = [["hhttps://github.com/graalvm/graalvm-ce-builds/releases/download/vm-20.2.0/graalvm-ce-java11-linux-aarch64-20.2.0.tar.gz", "graalvm"]]
+    us.ensureDirExists(paths.getTempDir())
+    //download to temp dir
+    arts.collect {
+        it
+    }.eachWithIndex { operation, index ->
+        task "download_${index}"(type: Download) {
+            def targetFileName = paths.getTempDir() + "/" + operation[1] + ".zip"
+            src operation[0]
+            dest targetFileName
+            enabled = !us.isFileExists(targetFileName.toString())
+        }
+    }
+    //extract
+    arts.collect {
+        it
+    }.eachWithIndex { operation, index ->
+        task "extract_${index}"(type: Copy) {
+            def zipFile = file(paths.getTempDir() + "/" + operation[1] + ".zip")
+            def outputDir = file(paths.getRootDir() + "/runtime")
+            from zipTree(zipFile)
+            into outputDir
+            enabled = !us.isFileExists(outputDir.toString() + "/" + operation[1])
+        }
+    }
+    arts.collect {
+        it
+    }.eachWithIndex { operation, index ->
+        tasks.findByPath('downloadAll').dependsOn.add("download_" + index)
+        tasks.findByPath('downloadAll').dependsOn.add("extract_" + index)
+    }
+}
+task(initalize) {
+    dependsOn clone
+    dependsOn downloadAll
+}
+task(build, dependsOn: initalize) {}
+defaultTasks 'build'
