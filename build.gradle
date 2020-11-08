@@ -13,7 +13,7 @@
     License along with this library; if not, write to the Free Software
     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-    Copyright (c) 2020 Marek Mosiewicz
+    Copyright (c) 2020 Marek Mosiewicz http://marekmosiewicz.pl
  */
 
 buildscript {
@@ -65,14 +65,14 @@ task(clone) {
 }
 //TODO move repos to settings.gradle as list
 task(downloadAll) {
-    def arts = [["https://github.com/graalvm/graalvm-ce-builds/releases/download/vm-20.2.0/graalvm-ce-java11-linux-aarch64-20.2.0.tar.gz", "graalvm"]]
+    def arts = [["https://github.com/graalvm/graalvm-ce-builds/releases/download/vm-20.2.0/graalvm-ce-java11-linux-aarch64-20.2.0.tar.gz", "graalvm","tar.gz"]]
     us.ensureDirExists(paths.getTempDir())
     //download to temp dir
     arts.collect {
         it
     }.eachWithIndex { operation, index ->
         task "download_${index}"(type: Download) {
-            def targetFileName = paths.getTempDir() + "/" + operation[1] + ".zip"
+            def targetFileName = paths.getTempDir() + "/" + operation[1] + "." + operation[2]
             src operation[0]
             dest targetFileName
             enabled = !us.isFileExists(targetFileName.toString())
@@ -83,9 +83,9 @@ task(downloadAll) {
         it
     }.eachWithIndex { operation, index ->
         task "extract_${index}"(type: Copy) {
-            def zipFile = file(paths.getTempDir() + "/" + operation[1] + ".zip")
+            def zipFile = file(paths.getTempDir() + "/" + operation[1] + "." + operation[2])
             def outputDir = file(paths.getRootDir() + "/runtime")
-            from zipTree(zipFile)
+            from tarTree(resources.gzip(zipFile))
             into outputDir
             enabled = !us.isFileExists(outputDir.toString() + "/" + operation[1])
         }
