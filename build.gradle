@@ -42,7 +42,6 @@ ext.paths = new GroovyShell(binding).parse(new File(rootDir+'/scripts/utils/path
 ext.us = new GroovyShell(binding).parse(new File(rootDir+'/scripts/utils/utils.gradle'))
 
 def graalUntarName = 'graalvm-ce-java11-20.2.0'
-def graalTempDestination = paths.getTempDir()+"/unzippedGraal"
 def graalRuntime = paths.getRootDir()+"/runtime/graalvm"
 def graalBinDir = paths.getRootDir()+"/runtime/graalvm/bin"
 def odooDir = paths.getSourceDir("odoo")
@@ -72,8 +71,7 @@ task(clone) {
 }
 //TODO move repos to settings.gradle as list
 task(downloadAll,dependsOn:clone) {
-    doFirst{
-        def arts = [["https://github.com/graalvm/graalvm-ce-builds/releases/download/vm-20.2.0/graalvm-ce-java11-linux-aarch64-20.2.0.tar.gz", "graalvm","tar.gz"]]
+        def arts = [["https://github.com/graalvm/graalvm-ce-builds/releases/download/vm-20.2.0/graalvm-ce-java11-linux-amd64-20.2.0.tar.gz", graalUntarName,"tar.gz"]]
         us.ensureDirExists(paths.getTempDir())
         //download to temp dir
         arts.collect {
@@ -90,44 +88,44 @@ task(downloadAll,dependsOn:clone) {
         arts.collect {
             it
         }.eachWithIndex { operation, index ->
-            task "extract_${index}"(type: Copy) {
-                def zipFile = file(paths.getTempDir() + "/" + operation[1] + "." + operation[2])
-                def outputDir = file(graalTempDestination)
-                from tarTree(resources.gzip(zipFile))
-                into outputDir
-                enabled = !us.isFileExists(graalTempDestination+'/'+graalUntarName)
+            task "extract_${index}"(type:Exec){
+                workingDir paths.getTempDir()
+                commandLine 'tar', '-zxvf', paths.getTempDir()+'/'+graalUntarName+".tar.gz"
+                enabled = !us.isFileExists(paths.getRootDir() + "/runtime/graalvm")
             }
         }
         arts.collect {
             it
         }.eachWithIndex { operation, index ->
-            tasks.findByPath('downloadAll').dependsOn.add("download_" + index)
+//            tasks.findByPath("extract_" + index).dependsOn.add("download_" + index)
             tasks.findByPath('downloadAll').dependsOn.add("extract_" + index)
+            tasks.findByPath('downloadAll').dependsOn.add("download_" + index)
         }
-    }
 }
 task(installGraalVM,dependsOn: downloadAll){
     doLast {
         if(!us.isFileExists(paths.getRootDir() + "/runtime/graalvm")) {
-            ant.move file: graalTempDestination + "/" + graalUntarName,
+            ant.move file: paths.getTempDir() + "/" + graalUntarName,
                      toDir: paths.getRootDir() + "/runtime"
             ant.move file: paths.getRootDir() + "/runtime/" + graalUntarName,
                     toFile: paths.getRootDir() + "/runtime/graalvm"
         }
     }
 }
+/*
 task chmodGu(type: Exec,dependsOn: installGraalVM) {
     commandLine 'chmod', '777', graalBinDir+'/gu'
-}
-task installPython(type:Exec,dependsOn: chmodGu){
+}*/
+task (installPython,type:Exec,dependsOn: installGraalVM){
     workingDir odooDir
     commandLine graalBinDir+'/gu', 'install','python'
 }
+/*
 task chmodPython(type: Exec,dependsOn: installPython) {
     commandLine 'chmod', '777', graalBinDir+'/graalpython'
 }
-
-task installSetupTools(type:Exec,dependsOn: chmodPython){
+*/
+task (installSetupTools,type:Exec,dependsOn: installPython){
     workingDir odooDir
     commandLine graalBinDir+'/graalpython', '-m','ginstall','install','setuptools'
 }
@@ -138,16 +136,13 @@ task installWerkzeug(type:Exec,dependsOn:installSetupTools){
 task startOdooServer(type:Exec){
     workingDir odooDir
     commandLine graalBinDir+'/graalpython', 'odoo-bin'
-
 }
 task setupPython(dependsOn: installWerkzeug)
-task(initalize) {
-    dependsOn clone
-    dependsOn downloadAll
+task(initialize) {
+    dependsOn installWerkzeug
 }
 task(build) {
-    dependsOn initalize
-    dependsOn installWerkzeug
+     dependsOn initialize
 }
 task(run){
     dependsOn build
