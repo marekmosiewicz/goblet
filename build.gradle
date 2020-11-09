@@ -40,6 +40,12 @@ def rootDir = rootProject.projectDir.toString()
 
 ext.paths = new GroovyShell(binding).parse(new File(rootDir+'/scripts/utils/paths.gradle'))
 ext.us = new GroovyShell(binding).parse(new File(rootDir+'/scripts/utils/utils.gradle'))
+
+def graalUntarName = 'graalvm-ce-java11-20.2.0'
+def graalTempDestination = paths.getTempDir()+"/unzippedGraal"
+def graalRuntime = paths.getRootDir()+"/runtime/graalvm"
+def graalBinDir = paths.getRootDir()+"/runtime/graalvm/bin"
+
 //we need to initalize it as it seems that there is no access to project
 // properties form script
 
@@ -84,10 +90,10 @@ task(downloadAll) {
     }.eachWithIndex { operation, index ->
         task "extract_${index}"(type: Copy) {
             def zipFile = file(paths.getTempDir() + "/" + operation[1] + "." + operation[2])
-            def outputDir = file(paths.getRootDir() + "/runtime")
+            def outputDir = file(graalTempDestination)
             from tarTree(resources.gzip(zipFile))
             into outputDir
-            enabled = !us.isFileExists(outputDir.toString() + "/" + operation[1])
+            enabled = !us.isFileExists(graalTempDestination)
         }
     }
     arts.collect {
@@ -97,9 +103,42 @@ task(downloadAll) {
         tasks.findByPath('downloadAll').dependsOn.add("extract_" + index)
     }
 }
+task(installGraalVM){
+    doLast {
+        if(!us.isFileExists(paths.getRootDir() + "/runtime/graalvm")) {
+            ant.move file: graalTempDestination + "/" + graalUntarName,
+                    toDir: paths.getRootDir() + "/runtime"
+            ant.move file: paths.getRootDir() + "/runtime/" + graalUntarName,
+                    toFile: paths.getRootDir() + "/runtime/graalvm"
+        }
+    }
+}
+task(installPython){
+
+}
+task(installSetupTools){
+
+}
+task(installWerkzeug){
+
+}
+task(startOdooServer){
+
+}
 task(initalize) {
     dependsOn clone
     dependsOn downloadAll
 }
-task(build, dependsOn: initalize) {}
+task(build) {
+    dependsOn initalize
+    dependsOn installGraalVM
+    dependsOn installPython
+    dependsOn installSetupTools
+    dependsOn installWerkzeug
+}
+task(run){
+    dependsOn build
+    dependsOn startOdooServer
+}
+
 defaultTasks 'build'
