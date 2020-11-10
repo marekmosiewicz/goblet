@@ -135,7 +135,19 @@ task installWerkzeug(type:Exec,dependsOn:installSetupTools){
 }
 task startOdooServer(type:Exec){
     workingDir odooDir
-    commandLine graalBinDir+'/graalpython', 'odoo-bin'
+    commandLine graalBinDir+'/graalpython', './odoo-bin'
+    standardOutput = new ByteArrayOutputStream()
+    errorOutput = new ByteArrayOutputStream()
+    ext.stdout = {
+        return standardOutput.toString()
+    }
+    ext.stderr = {
+        return errorOutput.toString()
+    }
+    doLast {
+        println ext.stdout()
+        println ext.stderr()
+    }
 }
 task setupPython(dependsOn: installWerkzeug)
 task(initialize) {
